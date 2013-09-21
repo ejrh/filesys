@@ -79,10 +79,17 @@ class Importer(object):
         return False
 
 
+    def should_ignore(self, path):
+        for r in self.ignore_res:
+            if r.search(path):
+                return True
+        return False
+
+
     def get_list(self, path):
         items = []
         for item in self.model.get_list(path):
-            if self.ignore_re.search(item.path) or self.ignore_re2.search(item.path):
+            if self.should_ignore(item.path):
                 print 'Ignoring %s' % item.path
                 continue
             items.append(item)
@@ -298,6 +305,21 @@ class Importer(object):
         except Exception, e:
             exception_info('Error reading config!', e)
             raise
+        
+        self.ignore_res = []
+        try:
+            self.db.execute("""SELECT ignore_regex, case_insensitive FROM config_ignore""")
+            rows = self.db.fetchall()
+            for row in rows:
+                flags = 0
+                if row['case_insensitive']:
+                    flags = flags | re.IGNORECASE
+                r = re.compile(row['ignore_regex'], flags)
+                self.ignore_res.append(r)
+        except Exception, e:
+            raise Exception('Error reading config_ignore!', e)
+        
+        self.no_md5_re = re.compile(self.no_md5_regex)
 
 
     def run(self, path, db_host=None):
@@ -319,10 +341,6 @@ class Importer(object):
         self.db.transaction_number = 0
         self.read_config()
         self.prepare_queries()
-
-        self.ignore_re = re.compile(self.ignore_regex)
-        self.ignore_re2 = re.compile(self.ignore_regex_i, re.IGNORECASE)
-        self.no_md5_re = re.compile(self.no_md5_regex)
         
         self.image_importer = ImageImporter(self.model, self.db, exception_info)
         

@@ -240,13 +240,17 @@ CREATE TABLE config
     thumbnail_width INTEGER DEFAULT 100,
     thumbnail_type TEXT DEFAULT 'image/png',
     
-    ignore_regex TEXT DEFAULT '^$',
-    ignore_regex_i TEXT DEFAULT '^$',
-    
     no_md5_regex TEXT DEFAULT '/pagefile.sys$'
 );
 
 INSERT INTO config DEFAULT VALUES;
+
+
+CREATE TABLE config_ignore
+(
+    ignore_regex TEXT NOT NULL,
+    case_insensitive BOOLEAN NOT NULL DEFAULT FALSE
+);
 
 
 GRANT SELECT,INSERT,UPDATE,DELETE ON

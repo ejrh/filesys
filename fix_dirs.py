@@ -70,7 +70,10 @@ class DirectoryFixer(object):
 
 
     def should_ignore(self, path):
-            return self.ignore_re.search(path) or self.ignore_re2.search(path)
+        for r in self.ignore_res:
+            if r.search(path):
+                return True
+        return False
 
 
     def fix_directory(self, id, name, full_name):
@@ -176,6 +179,19 @@ class DirectoryFixer(object):
                 setattr(self, f, v)
         except Exception, e:
             raise Exception('Error reading config!', e)
+        
+        self.ignore_res = []
+        try:
+            self.db.execute("""SELECT ignore_regex, case_insensitive FROM config_ignore""")
+            rows = self.db.fetchall()
+            for row in rows:
+                flags = 0
+                if row['case_insensitive']:
+                    flags = flags | re.IGNORECASE
+                r = re.compile(row['ignore_regex'], flags)
+                self.ignore_res.append(r)
+        except Exception, e:
+            raise Exception('Error reading config_ignore!', e)
 
 
     def run(self, rev):
@@ -185,10 +201,7 @@ class DirectoryFixer(object):
         self.prepare_queries()
         
         self.processed_dirs = set()
-
-        self.ignore_re = re.compile(self.ignore_regex)
-        self.ignore_re2 = re.compile(self.ignore_regex_i, re.IGNORECASE)
-
+        
         params = {'rev': rev}
         self.db.execute("""EXECUTE get_revisions(%(rev)s)""", params)
         rows = self.db.fetchall()
