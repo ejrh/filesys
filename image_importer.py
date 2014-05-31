@@ -1,7 +1,7 @@
 import re
 import math
 import os, tempfile
-import Image, ImageStat, ImageMath
+from PIL import Image, ImageStat, ImageMath
 
 from database import TransactionRollbackError
 
