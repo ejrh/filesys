@@ -43,7 +43,8 @@ class Importer(object):
         self.db.prepare("""PREPARE bulk_find_duplicates(name_size_modified[]) AS SELECT
                 orig_name, id, name, size, modified, md5
             FROM
-                find_duplicates($1) AS fd(orig_name VARCHAR, id INTEGER, name VARCHAR, size BIGINT, modified TIMESTAMP, md5 VARCHAR)""")
+                find_duplicates($1) AS fd(orig_name VARCHAR, id INTEGER, name VARCHAR, size BIGINT, modified TIMESTAMP, md5 VARCHAR)
+            FOR UPDATE""")
 
         self.db.prepare("""PREPARE set_modified(INTEGER, TEXT, TIMESTAMP) AS UPDATE file SET name = $2, modified = $3 WHERE id = $1""")
 
@@ -66,15 +67,18 @@ class Importer(object):
     def begin(self):
         self.db.begin()
         self.db.altered = False
-        self.db.transaction_age = time.time()
-        self.db.transaction_number += 1
-
+    
+    def begin_if_necessary(self):
+        if not self.db.in_transaction:
+            self.begin()
+            return True
+        
+        return False
 
     def commit_if_necessary(self):
         if ((self.db.altered and time.time() > self.db.transaction_age + self.commit_interval)
-                or (time.time() > self.db.transaction_age + self.commit_interval_max)):
+                or (self.db.in_transaction and time.time() > self.db.transaction_age + self.commit_interval_max)):
             self.db.commit()
-            self.begin()
             return True
         return False
 
@@ -155,6 +159,8 @@ class Importer(object):
 
 
     def insert_file(self, item):
+        self.begin_if_necessary()
+
         params = {"name": item.name, "size": item.size, "modified": item.modified, "md5": item.md5}
         try:
             self.db.execute("""EXECUTE insert_file(%(name)s, %(size)s, %(modified)s, %(md5)s)""", params)
@@ -171,6 +177,8 @@ class Importer(object):
     def insert_directory(self, item, child_ids):
         item.modified = None
         item = self.insert_file(item)
+        
+        self.begin_if_necessary()
 
         params = {"id": item.id, "children": item.children, "descendants": item.descendants}
         try:
@@ -201,6 +209,8 @@ class Importer(object):
 
 
     def import_file(self, item, dupes):
+        self.begin_if_necessary()
+
         dupe = self.process_duplicates(item, dupes)
         
         if dupe is not None:
@@ -209,6 +219,7 @@ class Importer(object):
             if not self.no_md5_re.search(item.path):
                 if item.size > 100000000:
                     print "(Reading item %s of size %d)" % (item.actual_path, item.size)
+                    self.commit()
                 item.md5 = self.model.get_file_md5(item.actual_path)
             else:
                 print "Skipping md5 for %s" % item.path
@@ -238,6 +249,9 @@ class Importer(object):
         md5_parts = []
         
         child_list = self.get_list(item.path)
+        
+        self.begin_if_necessary()
+
         dupes = self.get_duplicates(child_list)
         
         for child_item in child_list:
@@ -258,6 +272,7 @@ class Importer(object):
         ppp = hashlib.md5(item.md5str)
         item.md5 = ppp.hexdigest()
         
+        self.begin_if_necessary()
         # Does this directory already exist in the database?
         params = {"md5": item.md5}
         self.db.execute("""EXECUTE find_matching_dir(%(md5)s)""", params)
@@ -283,7 +298,6 @@ class Importer(object):
                 if top_level or self.db.transaction_number != start_transaction_number:
                     exception_info("Serialisation error in '%s'; retrying" % item.path, inst)
                     self.db.rollback()
-                    self.begin()
                     continue
                 else:
                     exception_info("Serialisation error in '%s'; bubbling up" % item.path, inst)
@@ -338,7 +352,6 @@ class Importer(object):
         self.db = Connection(connstr)
         self.db.connect()
         self.db.execute("SET client_encoding = UTF8");
-        self.db.transaction_number = 0
         self.read_config()
         self.prepare_queries()
         

@@ -24,18 +24,26 @@ class Connection(object):
         
         self.conn = psycopg2.connect(self.connstr)
         self.cursor = self.conn.cursor()
+        self.transaction_age = 0
+        self.transaction_number = 0
+        self.in_transaction = False
 
 
     def begin(self):
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
+        self.transaction_age = time.time()
+        self.transaction_number += 1
+        self.in_transaction = True
 
 
     def commit(self):
         self.conn.commit()
+        self.in_transaction = False
 
 
     def rollback(self):
         self.conn.rollback()
+        self.in_transaction = False
 
 
     def prepare(self, sql, min=None, max=10**9):
