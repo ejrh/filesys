@@ -219,7 +219,7 @@ class Importer(object):
             if not self.no_md5_re.search(item.path):
                 if item.size > 100000000:
                     print "(Reading item %s of size %d)" % (item.actual_path, item.size)
-                    self.commit()
+                    self.db.commit()
                 item.md5 = self.model.get_file_md5(item.actual_path)
             else:
                 print "Skipping md5 for %s" % item.path
