@@ -71,7 +71,7 @@ class DirectoryFixer(object):
 
     def should_ignore(self, path):
         for r in self.ignore_res:
-            if r.search(path):
+            if r.match(path):
                 return True
         return False
 
