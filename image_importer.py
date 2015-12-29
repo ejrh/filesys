@@ -93,6 +93,8 @@ class ImageImporter(object):
             return None
         
         im.load()
+        for k in im.info.keys():
+            del im.info[k]
         
         width,height = im.size
         MAX_IMAGE_SIZE = 10000000.0
